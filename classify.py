@@ -1,0 +1,109 @@
+"""Ask Jev and GPT to put one item into a category."""
+
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+
+
+def post_json(url, key, body):
+    """Send JSON and return the reply plus the time in milliseconds."""
+    data = json.dumps(body).encode()
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+    )
+    start = time.perf_counter()
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            reply = json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode(errors="replace")[:180]
+        raise RuntimeError(f"The model call failed ({error.code}). {detail}") from error
+    milliseconds = round((time.perf_counter() - start) * 1000)
+    return reply, milliseconds
+
+
+def add_other(categories):
+    """Append Other to the three category names."""
+    labels = [name.strip() for name in categories if name.strip()]
+    if "Other" not in labels:
+        labels.append("Other")
+    return labels
+
+
+def read_label(text, categories):
+    """Keep the reply only if it is one of the labels, otherwise Other."""
+    cleaned = (text or "").strip().strip(".,\"'`")
+    for label in categories:
+        if cleaned.lower() == label.lower():
+            return label
+    return "Other"
+
+
+def classify_with_jev(item, categories):
+    """Ask Jev which category the item belongs to."""
+    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Add TYPESAFE_API_KEY to the .env file.")
+    labels = add_other(categories)
+    criteria = {
+        label: "None of the categories" if label == "Other" else label
+        for label in labels
+    }
+    body = {
+        "model": "jev-latest",
+        "state": item,
+        "questions": {
+            "category": {
+                "type": "choice",
+                "instructions": "Which category does this item belong to?",
+                "criteria": criteria,
+            }
+        },
+    }
+    reply, milliseconds = post_json(
+        "https://api.typesafe.ai/v1/systemone",
+        key,
+        body,
+    )
+    answer = reply["answers"]["category"]
+    return {
+        "category": read_label(answer.get("choice"), labels),
+        "ms": milliseconds,
+        "confidence": answer.get("confidence"),
+    }
+
+
+def classify_with_gpt(item, categories):
+    """Ask GPT the same choice in one sentence."""
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Add OPENAI_API_KEY to the .env file.")
+    labels = add_other(categories)
+    names = ", ".join(labels)
+    prompt = (
+        f"Categories: {names}. "
+        f"Item: {item}. "
+        "Reply with one category name only."
+    )
+    body = {
+        "model": "gpt-5-nano",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_completion_tokens": 20,
+    }
+    reply, milliseconds = post_json(
+        "https://api.openai.com/v1/chat/completions",
+        key,
+        body,
+    )
+    text = reply["choices"][0]["message"]["content"]
+    return {
+        "category": read_label(text, labels),
+        "ms": milliseconds,
+    }

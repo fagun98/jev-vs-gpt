@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Choose categories</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, sans-serif;
+      background: #f4f5f7;
+      color: #1c1c1c;
+    }
+    main {
+      width: min(520px, calc(100% - 32px));
+      padding: 32px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    }
+    h1 { margin-top: 0; }
+    p { color: #444; }
+    label { display: block; margin: 14px 0; }
+    input {
+      width: 100%;
+      margin-top: 6px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      font: inherit;
+    }
+    button {
+      margin-top: 8px;
+      padding: 12px 22px;
+      border: 0;
+      border-radius: 999px;
+      background: #1c1c1c;
+      color: white;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
+    a { color: #444; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Choose 3 categories</h1>
+    <p>Items that fit none of them go in Other.</p>
+    <form id="form">
+      <label>Category 1 <input name="one" required placeholder="Fruits"></label>
+      <label>Category 2 <input name="two" required placeholder="Vegetables"></label>
+      <label>Category 3 <input name="three" required placeholder="Vehicles"></label>
+      <button id="start" type="submit" disabled>Start</button>
+    </form>
+    <p><a href="/">Back</a></p>
+  </main>
+  <script>
+    const form = document.querySelector("#form");
+    const start = document.querySelector("#start");
+    const inputs = [...form.querySelectorAll("input")];
+
+    function names() {
+      return inputs.map((input) => input.value.trim());
+    }
+
+    function checkReady() {
+      start.disabled = names().some((name) => name === "");
+    }
+
+    inputs.forEach((input) => input.addEventListener("input", checkReady));
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      sessionStorage.setItem("categories", JSON.stringify(names()));
+      window.location.href = "/play";
+    });
+  </script>
+</body>
+</html>

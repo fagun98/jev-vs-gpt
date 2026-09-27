@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Classify</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+      background: #f4f5f7;
+      color: #1c1c1c;
+    }
+    header, main { width: min(980px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 24px 0 8px; }
+    h1 { margin: 0; }
+    a { color: #444; }
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+    input {
+      flex: 1;
+      min-width: 180px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      font: inherit;
+    }
+    button {
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 999px;
+      background: #1c1c1c;
+      color: white;
+      font: inherit;
+      cursor: pointer;
+    }
+    .examples button {
+      background: white;
+      color: #1c1c1c;
+      border: 1px solid #ddd;
+    }
+    .note { min-height: 1.2em; color: #8a2b2b; }
+    .panels { display: grid; gap: 16px; }
+    @media (min-width: 800px) {
+      .panels { grid-template-columns: 1fr 1fr; }
+    }
+    .panel {
+      padding: 16px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    }
+    .jev { background: #d7e8fb; }
+    .gpt { background: #fff3c4; }
+    .stats { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 14px; }
+    .stats span { font-size: 0.95rem; }
+    .boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .box {
+      min-height: 110px;
+      padding: 10px;
+      border-radius: 14px;
+      background: white;
+    }
+    .box h2 { margin: 0 0 8px; font-size: 0.95rem; }
+    .box.coral { background: #ff8b7b; }
+    .box.teal { background: #3dbeb6; }
+    .box.purple { background: #b89bff; }
+    .box.other { background: #3a3a3a; color: white; }
+    .chip {
+      display: inline-block;
+      margin: 4px 4px 0 0;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.85);
+      color: #1c1c1c;
+      animation: drop 0.35s ease;
+    }
+    @keyframes drop {
+      from { transform: translateY(-14px); opacity: 0; }
+      to { transform: none; opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Classify an item</h1>
+    <p><a href="/categories">Change categories</a></p>
+  </header>
+  <main>
+    <form id="form" class="controls">
+      <input id="item" placeholder="apple" autocomplete="off">
+      <button type="submit">Submit</button>
+    </form>
+    <div class="controls examples">
+      <button type="button" data-example="apple">apple</button>
+      <button type="button" data-example="carrot">carrot</button>
+      <button type="button" data-example="bus">bus</button>
+      <button type="button" data-example="laptop">laptop</button>
+      <button type="button" data-example="tomato">tomato</button>
+    </div>
+    <p id="note" class="note"></p>
+    <section class="panels">
+      <article class="panel jev" id="jev"></article>
+      <article class="panel gpt" id="gpt"></article>
+    </section>
+  </main>
+  <script>
+    const saved = sessionStorage.getItem("categories");
+    if (!saved) window.location.replace("/categories");
+
+    const categories = saved ? JSON.parse(saved) : [];
+    const labels = categories.includes("Other") ? categories : categories.concat(["Other"]);
+    const colors = ["coral", "teal", "purple", "other"];
+    const history = { jev: [], gpt: [] };
+
+    function safe(text) {
+      return String(text)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function drawPanel(id, title) {
+      const panel = document.querySelector("#" + id);
+      const boxes = labels.map((label, index) => {
+        return (
+          '<div class="box ' + colors[index] + '" data-label="' + safe(label) + '">' +
+          "<h2>" + safe(label) + "</h2></div>"
+        );
+      }).join("");
+      panel.innerHTML =
+        "<h2>" + title + "</h2>" +
+        '<div class="stats">' +
+        "<span data-stat='current'>Current: —</span>" +
+        "<span data-stat='average'>Average: —</span>" +
+        "<span data-stat='rounds'>Rounds: 0</span>" +
+        "<span data-stat='fastest'>Fastest: —</span>" +
+        "<span data-stat='slowest'>Slowest: —</span>" +
+        "<span data-stat='confidence'></span>" +
+        "</div>" +
+        '<div class="boxes">' + boxes + "</div>";
+    }
+
+    function average(times) {
+      const total = times.reduce((sum, time) => sum + time, 0);
+      return Math.round(total / times.length);
+    }
+
+    function showStats(id, result) {
+      const panel = document.querySelector("#" + id);
+      const times = history[id];
+      if (result && typeof result.ms === "number") {
+        times.push(result.ms);
+        panel.querySelector("[data-stat='current']").textContent = "Current: " + result.ms + " ms";
+        panel.querySelector("[data-stat='average']").textContent = "Average: " + average(times) + " ms";
+        panel.querySelector("[data-stat='fastest']").textContent = "Fastest: " + Math.min(...times) + " ms";
+        panel.querySelector("[data-stat='slowest']").textContent = "Slowest: " + Math.max(...times) + " ms";
+      }
+      panel.querySelector("[data-stat='rounds']").textContent = "Rounds: " + times.length;
+      const confidence = panel.querySelector("[data-stat='confidence']");
+      if (id === "jev" && result && typeof result.confidence === "number") {
+        confidence.textContent = "Confidence: " + Math.round(result.confidence * 100) + "%";
+      } else if (id === "jev") {
+        confidence.textContent = "";
+      }
+    }
+
+    function dropWord(id, item, label) {
+      const panel = document.querySelector("#" + id);
+      const index = labels.findIndex((name) => name.toLowerCase() === String(label).toLowerCase());
+      const boxes = panel.querySelectorAll(".box");
+      const box = boxes[index] || boxes[boxes.length - 1];
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = item;
+      box.appendChild(chip);
+    }
+
+    function showEngine(id, item, result) {
+      if (!result || result.error) return;
+      showStats(id, result);
+      dropWord(id, item, result.category);
+    }
+
+    async function classifyItem(item) {
+      const note = document.querySelector("#note");
+      const submit = document.querySelector("#form button");
+      note.textContent = "Classifying…";
+      submit.disabled = true;
+      try {
+        const response = await fetch("/classify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item: item, categories: categories }),
+        });
+        const data = await response.json();
+        const problems = [data.jev, data.gpt]
+          .filter((result) => result && result.error)
+          .map((result) => result.error);
+        note.textContent = data.error || problems.join(" ");
+        showEngine("jev", item, data.jev);
+        showEngine("gpt", item, data.gpt);
+      } catch (error) {
+        note.textContent = "Could not reach the server.";
+      }
+      submit.disabled = false;
+    }
+
+    if (saved) {
+    drawPanel("jev", "Jev");
+    drawPanel("gpt", "GPT-5-nano");
+
+    document.querySelector("#form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const item = document.querySelector("#item").value.trim();
+      if (!item) return;
+      classifyItem(item);
+    });
+
+    document.querySelectorAll("[data-example]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelector("#item").value = button.dataset.example;
+      });
+    });
+    }
+  </script>
+</body>
+</html>
