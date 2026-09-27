@@ -11,7 +11,14 @@ import classify
 load_dotenv()
 
 app = FastAPI()
-PAGES = Path(__file__).parent / "pages"
+ROOT = Path(__file__).parent
+PAGES = ROOT / "pages"
+
+
+@app.get("/favicon.png")
+def show_icon():
+    """Open the page icon."""
+    return FileResponse(ROOT / "assets" / "favicon.png")
 
 
 @app.get("/")
