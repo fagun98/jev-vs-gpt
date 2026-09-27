@@ -1,10 +1,13 @@
 """Ask Jev and GPT to put one item into a category."""
 
+import argparse
 import json
 import os
 import time
 import urllib.error
 import urllib.request
+
+from dotenv import load_dotenv
 
 
 def post_json(url, key, body):
@@ -130,22 +133,52 @@ def classify_with_gpt(item, categories):
     labels = add_other(categories)
     names = ", ".join(labels)
     prompt = (
-        f"Categories: {names}. "
-        f"Item: {item}. "
+        f"Classify the item into one of the following categories:\n {names} \n\n"
+        f"Item: {item} \n\n"
         "Reply with one category name only."
     )
     body = {
         "model": "gpt-5-nano",
         "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": 20,
+        "max_completion_tokens": 200,
     }
+
     reply, milliseconds = post_json(
         "https://api.openai.com/v1/chat/completions",
         key,
         body,
-    )
+    )    
+
     text = reply["choices"][0]["message"]["content"]
+
     return {
         "category": read_label(text, labels),
         "ms": milliseconds,
     }
+
+
+def main():
+    """Read the query and print the Jev result, the GPT result, or both."""
+    load_dotenv()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("query")
+    parser.add_argument("--engine", choices=["jev", "gpt", "both"], required=True)
+    parser.add_argument("--categories", nargs="+", required=True)
+    args = parser.parse_args()
+    if args.engine in ("jev", "both"):
+        result = classify_with_jev(args.query, args.categories)
+        print("jev")
+        print("category:", result["category"])
+        print("ms:", result["ms"])
+        print("confidence:", result["confidence"])
+    if args.engine == "both":
+        print()
+    if args.engine in ("gpt", "both"):
+        result = classify_with_gpt(args.query, args.categories)
+        print("gpt")
+        print("category:", result["category"])
+        print("ms:", result["ms"])
+
+
+if __name__ == "__main__":
+    main()
