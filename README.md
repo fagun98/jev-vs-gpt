@@ -1,3 +1,5 @@
+![Jev vs GPT-5-nano](assets/github_banner.png)
+
 # Jev vs GPT
 
 A three-page game that compares [Jev](https://www.typesafe.ai/) and GPT-5-nano on the same classification task. You pick three categories, type an item, and both engines sort it. The page shows how long each call took.
