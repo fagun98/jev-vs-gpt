@@ -46,6 +46,48 @@ def read_label(text, categories):
     return "Other"
 
 
+def check_category(name, others):
+    """Ask Jev if a category is valid and if it overlaps the other names."""
+    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Add TYPESAFE_API_KEY to the .env file.")
+    name = name.strip()
+    filled = [other.strip() for other in others if other and other.strip()]
+    questions = {
+        "valid": {
+            "type": "noul",
+            "instructions": f"Is '{name}' a real category, not a vague word?",
+        }
+    }
+    for index, other in enumerate(filled):
+        questions[f"overlap_{index}"] = {
+            "type": "score",
+            "instructions": f"How much does '{name}' overlap with '{other}'?",
+            "criteria": ["does not overlap", "overlaps"],
+        }
+    reply, _milliseconds = post_json(
+        "https://api.typesafe.ai/v1/systemone",
+        key,
+        {"model": "jev-latest", "state": name, "questions": questions},
+    )
+    answers = reply["answers"]
+    valid = answers["valid"].get("noul", 0) >= 0.5
+    overlapped = []
+    for index, other in enumerate(filled):
+        score = answers[f"overlap_{index}"].get("score", 0)
+        if score >= 0.5:
+            overlapped.append(other)
+    if not valid:
+        return {"ok": False, "reason": "Too vague", "overlapped": overlapped}
+    if overlapped:
+        return {
+            "ok": False,
+            "reason": "Overlaps with " + overlapped[0],
+            "overlapped": overlapped,
+        }
+    return {"ok": True, "reason": "Looks valid", "overlapped": []}
+
+
 def classify_with_jev(item, categories):
     """Ask Jev which category the item belongs to."""
     key = os.environ.get("TYPESAFE_API_KEY", "").strip()

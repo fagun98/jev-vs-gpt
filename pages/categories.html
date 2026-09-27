@@ -29,10 +29,15 @@
       width: 100%;
       margin-top: 6px;
       padding: 12px;
-      border: 1px solid #ddd;
+      border: 2px solid #3b82f6;
       border-radius: 12px;
       font: inherit;
     }
+    input.green { border-color: #1f9d55; }
+    input.red { border-color: #d64545; }
+    .reason { display: block; min-height: 1.2em; margin-top: 4px; font-size: 0.9rem; }
+    input.green + .reason { color: #1f9d55; }
+    input.red + .reason { color: #d64545; }
     button {
       margin-top: 8px;
       padding: 12px 22px;
@@ -50,11 +55,20 @@
 <body>
   <main>
     <h1>Choose 3 categories</h1>
-    <p>Items that fit none of them go in Other.</p>
+    <p>Leave a field to check it. Items that fit none of them go in Other.</p>
     <form id="form">
-      <label>Category 1 <input name="one" required placeholder="Fruits"></label>
-      <label>Category 2 <input name="two" required placeholder="Vegetables"></label>
-      <label>Category 3 <input name="three" required placeholder="Vehicles"></label>
+      <label>Category 1
+        <input name="one" placeholder="Fruits" autocomplete="off">
+        <span class="reason"></span>
+      </label>
+      <label>Category 2
+        <input name="two" placeholder="Vegetables" autocomplete="off">
+        <span class="reason"></span>
+      </label>
+      <label>Category 3
+        <input name="three" placeholder="Vehicles" autocomplete="off">
+        <span class="reason"></span>
+      </label>
       <button id="start" type="submit" disabled>Start</button>
     </form>
     <p><a href="/">Back</a></p>
@@ -68,14 +82,74 @@
       return inputs.map((input) => input.value.trim());
     }
 
-    function checkReady() {
-      start.disabled = names().some((name) => name === "");
+    function paint(input, color, reason) {
+      input.classList.remove("green", "red");
+      if (color === "green" || color === "red") input.classList.add(color);
+      input.nextElementSibling.textContent = reason;
     }
 
-    inputs.forEach((input) => input.addEventListener("input", checkReady));
+    function refreshStart() {
+      start.disabled = !inputs.every((input) => input.classList.contains("green"));
+    }
+
+    function otherNames(input) {
+      return inputs
+        .filter((other) => other !== input)
+        .map((other) => other.value.trim())
+        .filter((name) => name !== "");
+    }
+
+    inputs.forEach((input) => {
+      input.dataset.checked = "";
+
+      input.addEventListener("input", () => {
+        if (input.value.trim() !== input.dataset.checked) {
+          paint(input, "blue", "");
+          input.dataset.checked = "";
+        }
+        refreshStart();
+      });
+
+      input.addEventListener("blur", () => {
+        checkField(input);
+      });
+    });
+
+    async function checkField(input) {
+      const name = input.value.trim();
+      if (!name) {
+        paint(input, "blue", "");
+        input.dataset.checked = "";
+        refreshStart();
+        return;
+      }
+      if (name === input.dataset.checked) return;
+      paint(input, "blue", "Checking…");
+      try {
+        const response = await fetch("/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name, others: otherNames(input) }),
+        });
+        const data = await response.json();
+        if (input.value.trim() !== name) return;
+        input.dataset.checked = name;
+        if (data.error) {
+          paint(input, "red", data.error);
+        } else if (data.ok) {
+          paint(input, "green", data.reason);
+        } else {
+          paint(input, "red", data.reason);
+        }
+      } catch (error) {
+        if (input.value.trim() === name) paint(input, "red", "Could not reach the server.");
+      }
+      refreshStart();
+    }
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
+      if (start.disabled) return;
       sessionStorage.setItem("categories", JSON.stringify(names()));
       window.location.href = "/play";
     });

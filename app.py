@@ -1,4 +1,4 @@
-"""Serve the three game pages and classify one item."""
+"""Serve the three game pages, check a category, and classify one item."""
 
 from pathlib import Path
 
@@ -30,6 +30,17 @@ def show_categories():
 def show_play():
     """Open the play page."""
     return FileResponse(PAGES / "play.html")
+
+
+@app.post("/check")
+def check_category(name: str = Body(), others: list[str] = Body()):
+    """Check one category name against the other filled names."""
+    if not name.strip():
+        return {"error": "Type a category first."}
+    try:
+        return classify.check_category(name, others)
+    except Exception as error:
+        return {"error": str(error)}
 
 
 @app.post("/classify")
