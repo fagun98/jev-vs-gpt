@@ -118,6 +118,7 @@
     const labels = categories.includes("Other") ? categories : categories.concat(["Other"]);
     const colors = ["coral", "teal", "purple", "other"];
     const history = { jev: [], gpt: [] };
+    const used = new Set();
 
     function safe(text) {
       return String(text)
@@ -207,6 +208,8 @@
         note.textContent = data.error || problems.join(" ");
         showEngine("jev", item, data.jev);
         showEngine("gpt", item, data.gpt);
+        const placed = [data.jev, data.gpt].some((result) => result && !result.error && result.category);
+        if (placed) used.add(item.toLowerCase());
       } catch (error) {
         note.textContent = "Could not reach the server.";
       }
@@ -220,7 +223,13 @@
     document.querySelector("#form").addEventListener("submit", (event) => {
       event.preventDefault();
       const item = document.querySelector("#item").value.trim();
+      const field = document.querySelector("#item");
       if (!item) return;
+      field.value = "";
+      if (used.has(item.toLowerCase())) {
+        document.querySelector("#note").textContent = "Already added";
+        return;
+      }
       classifyItem(item);
     });
 
